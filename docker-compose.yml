@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  openldap:
+    build: .
+    environment:
+      - DEV_MODE=1
+    container_name: openldap
+    image: semhoun/openldap:2.0.0
+    volumes:
+      - ./data/etc:/etc/ldap/slapd.d
+      - ./data/var:/var/lib/ldap
+    ports:
+      - 389:389
+      - 636:636
