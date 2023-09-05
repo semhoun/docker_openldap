@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # set -x (bash debug) if log level is trace
-# https://github.com/osixia/docker-light-baseimage/blob/master/image/tool/log-helper
 log-helper level eq trace && set -x
 
 SCHEMAS=$1
 
 tmpd=`mktemp -d`
 pushd ${tmpd} >>/dev/null
+
+mkdir ldif
 
 echo "include /etc/ldap/schema/core.schema" >> convert.dat
 echo "include /etc/ldap/schema/cosine.schema" >> convert.dat
@@ -24,7 +25,7 @@ for schema in ${SCHEMAS} ; do
     echo "include ${schema}" >> convert.dat
 done
 
-slaptest -f convert.dat -F .
+slaptest -f convert.dat -F ldif
 
 if [ $? -ne 0 ] ; then
     log-helper error "slaptest conversion failed"
@@ -35,7 +36,7 @@ for schema in ${SCHEMAS} ; do
     fullpath=${schema}
     schema_name=`basename ${fullpath} .schema`
     schema_dir=`dirname ${fullpath}`
-    ldif_file=${schema_name}.ldif
+    ldif_file=ldif/${schema_name}.ldif
 
     if [ -e "${schema_dir}/${ldif_file}" ]; then
       log-helper warning "${schema} ldif file ${schema_dir}/${ldif_file} already exists skipping conversion"

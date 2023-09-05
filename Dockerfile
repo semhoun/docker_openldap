@@ -1,4 +1,5 @@
 FROM debian:bookworm-slim 
+LABEL maintainer="Nathanaël SEMHOUN <nathanael@semhoun.net>"
 
 ARG LDAP_OPENLDAP_GID
 ARG LDAP_OPENLDAP_UID
@@ -13,6 +14,7 @@ RUN set -ex \
 	\
     # echo "path-include /usr/share/doc/krb5*" >> /etc/dpkg/dpkg.cfg.d/docker \
     && apt-get update -q && LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+		vim \
         ca-certificates \
         iputils-ping \
         ldap-utils \
@@ -28,7 +30,7 @@ RUN set -ex \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-COPY root_fs/ /
+COPY rootfs/ /
 
 # Log level
 ENV LDAP_LOG_LEVEL 256
@@ -43,7 +45,8 @@ ENV LDAPS_PORT 636
 # Expose default ldap and ldaps ports
 EXPOSE 389 636
 
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/opt/bin/entrypoint.sh"]
+CMD ["/opt/slapd/process.sh"]
 
 # Put ldap config and database dir in a volume to persist data.
 VOLUME ["/etc/ldap/slapd.d ", "/var/lib/ldap"]

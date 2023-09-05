@@ -1,0 +1,29 @@
+dn: olcDatabase={1}{{ LDAP_BACKEND }},cn=config
+changetype: modify
+delete: olcAccess
+-
+add: olcAccess
+olcAccess: to * by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage by * break
+olcAccess: to attrs=userPassword,shadowLastChange by self write by dn="cn=admin,{{ LDAP_BASE_DN }}" write by anonymous auth by * none
+olcAccess: to * by self read by dn="cn=admin,{{ LDAP_BASE_DN }}" write by * none
+
+# Password Hash
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+add: olcPasswordHash
+olcPasswordHash: {SSHA}
+
+# Load policy module
+dn: cn=module{0},cn=config
+changetype: modify
+add: olcModuleLoad
+olcModuleLoad: ppolicy
+
+# Policy
+dn: olcOverlay={2}ppolicy,olcDatabase={1}{{ LDAP_BACKEND }},cn=config
+changetype: add
+objectClass: olcOverlayConfig
+objectClass: olcPPolicyConfig
+olcOverlay: {2}ppolicy
+olcPPolicyUseLockout: TRUE
+olcPPolicyHashCleartext: TRUE
