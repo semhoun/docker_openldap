@@ -3,7 +3,7 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/semhoun/openldap.svg)](https://hub.docker.com/r/semhoun/openldap/)
 [![Docker Stars](https://img.shields.io/docker/stars/semhoun/openldap.svg)](https://hub.docker.com/r/semhoun/openldap/)
 
-Latest release: 2.0.0 - [OpenLDAP 2.5.13](https://www.openldap.org/software/release/changes.html) -  [Changelog](CHANGELOG.md) | [Docker Hub](https://hub.docker.com/r/semhoun/openldap/) 
+Latest release: 2.1.0 - [OpenLDAP 2.6.10](https://www.openldap.org/software/release/changes.html) -  [Changelog](CHANGELOG.md) | [Docker Hub](https://hub.docker.com/r/semhoun/openldap/) 
 
 **A docker image to run OpenLDAP.**
 
@@ -12,11 +12,13 @@ Latest release: 2.0.0 - [OpenLDAP 2.5.13](https://www.openldap.org/software/rele
 ## Acknowledgement
 This project was forked from [osixia/docker-openldap](https://github.com/osixia/docker-openldap)
 
+I remove TLS and Replication parts.
+
 ## Contributing
 
 If you find this image useful here's how you can help:
 
-- Send a pull request with your kickass new features and bug fixes
+- Send a pull request with your new features and bug fixes
 - Help new users with [issues](https://github.com/semhoun/docker_openldap/issues) they may encounter
 - Support the development of this image and star this repo !
 
@@ -30,7 +32,7 @@ docker run --name my-openldap-container --detach semhoun/openldap:latest
 Do not forget to add the port mapping for both port 389 and 636 if you wish to access the ldap server from another machine.
 
 ```sh
-docker run -p 389:389 -p 636:636 --name my-openldap-container --detach semhoun/openldap:latest
+docker run -p 389:389 --name my-openldap-container --detach semhoun/openldap:latest
 ```
 
 Either command starts a new container with OpenLDAP running inside. Let's make the first search in our LDAP container:
@@ -99,16 +101,7 @@ docker exec my_ldap_container id openldap
 
 For more information about docker data volume, please refer to:
 
-> [https://docs.docker.com/engine/tutorials/dockervolumes/](https://docs.docker.com/engine/tutorials/dockervolumes/)
-
-#### Firewall issues on RHEL/CentOS
-Docker Engine doesn't work well with firewall-cmd and can cause issues if you're connecting to the LDAP server from another container on the same machine. You can fix this by running:
-```sh
-$ firewall-cmd --add-port=389/tcp --permanent
-$ firewall-cmd --add-port=636/tcp --permanent
-$ firewall-cmd --reload
-```
-Learn more about this issue at https://github.com/moby/moby/issues/32138
+> [https://docs.docker.com/engine/tutorials/dockervolumes/
 
 #### Edit your server configuration
 
@@ -166,14 +159,6 @@ variables:
   LDAP_SEED_INTERNAL_SCHEMA_PATH: "${CI_PROJECT_DIR}/docker/openldap/schema"
 ```
 
-Also, certificates can be used by the internal path. The file, specified in a variable, will be copied in the default certificate directory of this image. If desired, you can use these with the LDAP_TLS_CRT_FILENAME, LDAP_TLS_KEY_FILENAME, LDAP_TLS_CA_CRT_FILENAME and LDAP_TLS_DH_PARAM_FILENAME to set a different filename in the default certificate directory of the image.
-
-	variables:
-	    LDAP_SEED_INTERNAL_LDAP_TLS_CRT_FILE: "${CI_PROJECT_DIR}/docker/certificates/certs/cert.pem"
-	    LDAP_SEED_INTERNAL_LDAP_TLS_KEY_FILE: "${CI_PROJECT_DIR}/docker/certificates/certs/key.pem"
-	    LDAP_SEED_INTERNAL_LDAP_TLS_CA_CRT_FILE: "${CI_PROJECT_DIR}/docker/certificates/ca/ca.pem"
-	    LDAP_SEED_INTERNAL_LDAP_TLS_DH_PARAM_FILE: "${CI_PROJECT_DIR}/certificates/dhparam.pem"
-
 ### Use an existing ldap database
 
 This can be achieved by mounting host directories as volume.
@@ -192,77 +177,6 @@ You can also use data volume containers. Please refer to:
 > [https://docs.docker.com/engine/tutorials/dockervolumes/](https://docs.docker.com/engine/tutorials/dockervolumes/)
 
 Note: By default this image is waiting an **mdb**  database backend, if you want to use any other database backend set backend type via the LDAP_BACKEND environment variable.
-
-### TLS
-
-#### Use auto-generated certificate
-
-> TLS is set to false until bug #1 is fixed
-
-By default, TLS is already configured and enabled, certificate is created using container hostname (it can be set by docker run --hostname option eg: ldap.example.org).
-
-```sh
-docker run --hostname ldap.my-company.com --detach semhoun/openldap:latest
-```
-
-#### Use your own certificate
-
-You can set your custom certificate at run time, by mounting a directory containing those files to **/service/slapd/assets/certs** and adjust their name with the following environment variables:
-
-```sh
-docker run \
-	--hostname ldap.example.org \
-	--volume /path/to/certificates:/service/slapd/assets/certs \
-	--env LDAP_TLS_CRT_FILENAME=my-ldap.crt \
-	--env LDAP_TLS_KEY_FILENAME=my-ldap.key \
-	--env LDAP_TLS_CA_CRT_FILENAME=the-ca.crt \
-	--detach semhoun/openldap:latest
-```
-
-Other solutions are available please refer to the [Advanced User Guide](#advanced-user-guide)
-
-#### Disable TLS
-Add --env LDAP_TLS=false to the run command:
-
-	docker run --env LDAP_TLS=false --detach semhoun/openldap:latest
-
-### Multi master replication
-Quick example, with the default config.
-
-	#Create the first ldap server, save the container id in LDAP_CID and get its IP:
-	LDAP_CID=$(docker run --hostname ldap.example.org --env LDAP_REPLICATION=true --detach semhoun/openldap:latest)
-	LDAP_IP=$(docker inspect -f "{{ .NetworkSettings.IPAddress }}" $LDAP_CID)
-	
-	#Create the second ldap server, save the container id in LDAP2_CID and get its IP:
-	LDAP2_CID=$(docker run --hostname ldap2.example.org --env LDAP_REPLICATION=true --detach semhoun/openldap:latest)
-	LDAP2_IP=$(docker inspect -f "{{ .NetworkSettings.IPAddress }}" $LDAP2_CID)
-	
-	#Add the pair "ip hostname" to /etc/hosts on each containers,
-	#because ldap.example.org and ldap2.example.org are fake hostnames
-	docker exec $LDAP_CID bash -c "echo $LDAP2_IP ldap2.example.org >> /etc/hosts"
-	docker exec $LDAP2_CID bash -c "echo $LDAP_IP ldap.example.org >> /etc/hosts"
-
-That's it! But a little test to be sure:
-
-Add a new user "billy" on the first ldap server
-
-	docker exec $LDAP_CID ldapadd -x -D "cn=admin,dc=example,dc=org" -w admin -f /service/slapd/assets/test/new-user.ldif -H ldap://ldap.example.org -ZZ
-
-Search on the second ldap server, and billy should show up!
-
-	docker exec $LDAP2_CID ldapsearch -x -H ldap://ldap2.example.org -b dc=example,dc=org -D "cn=admin,dc=example,dc=org" -w admin -ZZ
-	
-	[...]
-	
-	# billy, example.org
-	dn: uid=billy,dc=example,dc=org
-	uid: billy
-	cn: billy
-	sn: 3
-	objectClass: top
-	objectClass: posixAccount
-	objectClass: inetOrgPerson
-	[...]
 
 ### Fix docker mounted file problems
 
@@ -326,44 +240,11 @@ Backend:
 
 	Help: https://www.openldap.org/doc/admin24/backends.html
 
-TLS options:
-- **LDAP_TLS**: Add openldap TLS capabilities. Can't be removed once set to true. Defaults to `true`.
-- **LDAP_TLS_CRT_FILENAME**: Ldap ssl certificate filename. Defaults to `ldap.crt`
-- **LDAP_TLS_KEY_FILENAME**: Ldap ssl certificate private key filename. Defaults to `ldap.key`
-- **LDAP_TLS_DH_PARAM_FILENAME**: Ldap ssl certificate dh param file. Defaults to `dhparam.pem`
-- **LDAP_TLS_CA_CRT_FILENAME**: Ldap ssl CA certificate  filename. Defaults to `ca.crt`
-- **LDAP_TLS_ENFORCE**: Enforce TLS but except ldapi connections. Can't be disabled once set to true. Defaults to `false`.
-- **LDAP_TLS_CIPHER_SUITE**: TLS cipher suite. Defaults to `SECURE256:+SECURE128:-VERS-TLS-ALL:+VERS-TLS1.2:-RSA:-DHE-DSS:-CAMELLIA-128-CBC:-CAMELLIA-256-CBC`, based on Red Hat's [TLS hardening guide](https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Security_Guide/sec-Hardening_TLS_Configuration.html)
-- **LDAP_TLS_VERIFY_CLIENT**: TLS verify client. Defaults to `demand`
-
-	Help: https://www.openldap.org/doc/admin24/tls.html
-
-Replication options:
-- **LDAP_REPLICATION**: Add openldap replication capabilities. Possible values : `true`, `false`, `own`. Defaults to `false`. Setting this to `own` allow to provide own replication settings via custom bootstrap ldifs.
-
-- **LDAP_REPLICATION_CONFIG_SYNCPROV**: olcSyncRepl options used for the config database. Without **rid** and **provider** which are automatically added based on LDAP_REPLICATION_HOSTS.  Defaults to `binddn="cn=admin,cn=config" bindmethod=simple credentials=$LDAP_CONFIG_PASSWORD searchbase="cn=config" type=refreshAndPersist retry="60 +" timeout=1 starttls=critical`
-
-- **LDAP_REPLICATION_DB_SYNCPROV**: olcSyncRepl options used for the database. Without **rid** and **provider** which are automatically added based on LDAP_REPLICATION_HOSTS.  Defaults to `binddn="cn=admin,$LDAP_BASE_DN" bindmethod=simple credentials=$LDAP_ADMIN_PASSWORD searchbase="$LDAP_BASE_DN" type=refreshAndPersist interval=00:00:00:10 retry="60 +" timeout=1 starttls=critical`
-
-- **LDAP_REPLICATION_HOSTS**: list of replication hosts, must contain the current container hostname set by --hostname on docker run command. Defaults to :
-	```yaml
-  - ldap://ldap.example.org
-  - ldap://ldap2.example.org
-	```
-
-	If you want to set this variable at docker run command add the tag `#PYTHON2BASH:` and convert the yaml in python:
-
-		docker run --env LDAP_REPLICATION_HOSTS="#PYTHON2BASH:['ldap://ldap.example.org','ldap://ldap2.example.org']" --detach semhoun/openldap:latest
-
-	To convert yaml to python online: https://yaml-online-parser.appspot.com/
-
 Other environment variables:
 - **KEEP_EXISTING_CONFIG**: Do not change the ldap config. Defaults to `false`
 	- if set to *true* with an existing database, config will remain unchanged. Image tls and replication config will not be run. The container can be started with LDAP_ADMIN_PASSWORD and LDAP_CONFIG_PASSWORD empty or filled with fake data.
 	- if set to *true* when bootstrapping a new database, bootstrap ldif and schema will not be added and tls and replication config will not be run.
-
 - **LDAP_REMOVE_CONFIG_AFTER_SETUP**: delete config folder after setup. Defaults to `true`
-- **LDAP_SSL_HELPER_PREFIX**: ssl-helper environment variables prefix. Defaults to `ldap`, ssl-helper first search config from LDAP_SSL_HELPER_* variables, before SSL_HELPER_* variables.
 - **HOSTNAME**: set the hostname of the running openldap server. Defaults to whatever docker creates.
 - **DISABLE_CHOWN**: do not perform any chown to fix file ownership. Defaults to `false`
 - LDAP_OPENLDAP_UID: runtime docker user uid to run container as
@@ -437,11 +318,10 @@ If you need to add your custom TLS certificate, bootstrap config or environment 
 Dockerfile example:
 
 ```dockerfile
-FROM semhoun/openldap:latest
-LABEL maintainer="Your Name <your@name.com>"
+FROM semhoun/openldap
+MAINTAINER Your Name <your@name.com>
 
-ADD bootstrap /opt/slapd/assets/config/bootstrap
-ADD certs /opt/slapd/assets/certs
+ADD bootstrap /container/service/slapd/assets/config/bootstrap
 ADD environment /container/environment/01-custom
 ```
 
@@ -449,31 +329,6 @@ See complete example in **example/extend-semhoun-openldap**
 
 Warning: if you want to install new packages from debian repositories, this image has a configuration to prevent documentation and locales to be installed. If you need the doc and locales remove the following files :
 **/etc/dpkg/dpkg.cfg.d/01_nodoc** and **/etc/dpkg/dpkg.cfg.d/01_nolocales**
-
-### Tests
-
-We use **Bats** (Bash Automated Testing System) to test this image:
-
-> [https://github.com/bats-core/bats-core](https://github.com/bats-core/bats-core)
-
-Install Bats, and in this project directory run:
-
-```sh
-make test
-```
-
-### Kubernetes
-
-Kubernetes is an open source system for managing containerized applications across multiple hosts, providing basic mechanisms for deployment, maintenance, and scaling of applications.
-
-More information:
-- https://kubernetes.io/
-- https://github.com/kubernetes/kubernetes
-
-semhoun-openldap kubernetes examples are available in **example/kubernetes**
-
-### Known security issues
-OpenLDAP on debian creates two admin users with the same password, if you changed admin password after bootstrap you may be concerned by issue #161.
 
 ## Changelog
 

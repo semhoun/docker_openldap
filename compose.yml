@@ -1,0 +1,19 @@
+services:
+  openldap:
+    image: semhoun/openldap
+    build: .
+    environment:
+      LDAP_ORGANISATION: E-Dune
+      LDAP_DOMAIN: e-dune.info
+      LDAP_ADMIN_PASSWORD: d@mpZebra93
+      LDAP_CONFIG_PASSWORD: C0nf!g
+      LDAP_RFC2307BIS_SCHEMA: false
+      LDAP_REMOVE_CONFIG_AFTER_SETUP: false
+      DOCKER_LOG_LEVEL: debug
+    container_name: openldap
+    image: semhoun/openldap
+    volumes:
+      - ./data/etc:/etc/ldap/slapd.d
+      - ./data/var:/var/lib/ldap
+    ports:
+      - 389:389

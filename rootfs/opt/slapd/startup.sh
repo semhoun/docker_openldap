@@ -72,6 +72,7 @@ log-helper info "-------------------------------------"
 # fix file permissions
 if [ "${DISABLE_CHOWN,,}" == "false" ]; then
   log-helper info "updating file uid/gid ownership"
+  mkdir -p /var/run/slapd
   chown -R openldap:openldap /var/run/slapd
   chown -R openldap:openldap /var/lib/ldap
   chown -R openldap:openldap /etc/ldap
@@ -79,15 +80,7 @@ if [ "${DISABLE_CHOWN,,}" == "false" ]; then
 fi
 
 FIRST_START_DONE="/etc/ldap/slapd.d/slapd-first-start-done"
-WAS_STARTED_WITH_TLS="/etc/ldap/slapd.d/docker-openldap-was-started-with-tls"
-WAS_STARTED_WITH_TLS_ENFORCE="/etc/ldap/slapd.d/docker-openldap-was-started-with-tls-enforce"
-WAS_STARTED_WITH_REPLICATION="/etc/ldap/slapd.d/docker-openldap-was-started-with-replication"
 WAS_ADMIN_PASSWORD_SET="/etc/ldap/slapd.d/docker-openldap-was-admin-password-set"
-
-LDAP_TLS_CA_CRT_PATH="/opt/slapd/assets/certs/$LDAP_TLS_CA_CRT_FILENAME"
-LDAP_TLS_CRT_PATH="/opt/slapd/assets/certs/$LDAP_TLS_CRT_FILENAME"
-LDAP_TLS_KEY_PATH="/opt/slapd/assets/certs/$LDAP_TLS_KEY_FILENAME"
-LDAP_TLS_DH_PARAM_PATH="/opt/slapd/assets/certs/$LDAP_TLS_DH_PARAM_FILENAME"
 
 copy_internal_seed_if_exists() {
   local src=$1
@@ -99,15 +92,6 @@ copy_internal_seed_if_exists() {
 }
 
 # Copy seed files from internal path if specified
-file_env 'LDAP_SEED_INTERNAL_LDAP_TLS_CRT_FILE'
-copy_internal_seed_if_exists "${LDAP_SEED_INTERNAL_LDAP_TLS_CRT_FILE}" "${LDAP_TLS_CRT_PATH}"
-file_env 'LDAP_SEED_INTERNAL_LDAP_TLS_KEY_FILE'
-copy_internal_seed_if_exists "${LDAP_SEED_INTERNAL_LDAP_TLS_KEY_FILE}" "${LDAP_TLS_KEY_PATH}"
-file_env 'LDAP_SEED_INTERNAL_LDAP_TLS_CA_CRT_FILE'
-copy_internal_seed_if_exists "${LDAP_SEED_INTERNAL_LDAP_TLS_CA_CRT_FILE}" "${LDAP_TLS_CA_CRT_PATH}"
-file_env 'LDAP_SEED_INTERNAL_LDAP_TLS_DH_PARAM_FILE'
-copy_internal_seed_if_exists "${LDAP_SEED_INTERNAL_LDAP_TLS_DH_PARAM_FILE}" "${LDAP_TLS_DH_PARAM_PATH}"
-file_env 'LDAP_SEED_INTERNAL_SCHEMA_PATH'
 copy_internal_seed_if_exists "${LDAP_SEED_INTERNAL_SCHEMA_PATH}" "/opt/slapd/assets/config/bootstrap/schema/custom"
 file_env 'LDAP_SEED_INTERNAL_LDIF_PATH'
 copy_internal_seed_if_exists "${LDAP_SEED_INTERNAL_LDIF_PATH}" "/opt/slapd/assets/config/bootstrap/ldif/custom"
@@ -224,7 +208,7 @@ EOF
       fi
     fi
 
-    rm /opt/slapd/assets/config/bootstrap/schema/rfc2307bis.*
+    rm -f /opt/slapd/assets/config/bootstrap/schema/rfc2307bis.*
 
   #
   # Error: the database directory (/var/lib/ldap) is empty but not the config directory (/etc/ldap/slapd.d)
@@ -276,29 +260,6 @@ EOF
       if [ "$PREVIOUS_HOSTNAME" != "$HOSTNAME" ]; then
         echo "127.0.0.2 $PREVIOUS_HOSTNAME" >> /etc/hosts
         PREVIOUS_HOSTNAME_PARAM="ldap://$PREVIOUS_HOSTNAME"
-      fi
-    fi
-
-    # if the config was bootstraped with TLS
-    # to avoid error (#6) (#36) and (#44)
-    # we create fake temporary certificates if they do not exists
-    if [ -e "$WAS_STARTED_WITH_TLS" ]; then
-      source $WAS_STARTED_WITH_TLS
-
-      log-helper debug "Check previous TLS certificates..."
-
-      # image started with an existing database/config created before 1.1.5
-      [[ -z "$PREVIOUS_LDAP_TLS_CA_CRT_PATH" ]] && PREVIOUS_LDAP_TLS_CA_CRT_PATH="/opt/slapd/assets/certs/$LDAP_TLS_CA_CRT_FILENAME"
-      [[ -z "$PREVIOUS_LDAP_TLS_CRT_PATH" ]] && PREVIOUS_LDAP_TLS_CRT_PATH="/opt/slapd/assets/certs/$LDAP_TLS_CRT_FILENAME"
-      [[ -z "$PREVIOUS_LDAP_TLS_KEY_PATH" ]] && PREVIOUS_LDAP_TLS_KEY_PATH="/opt/slapd/assets/certs/$LDAP_TLS_KEY_FILENAME"
-      [[ -z "$PREVIOUS_LDAP_TLS_DH_PARAM_PATH" ]] && PREVIOUS_LDAP_TLS_DH_PARAM_PATH="/opt/slapd/assets/certs/$LDAP_TLS_DH_PARAM_FILENAME"
-
-      ssl-helper $LDAP_SSL_HELPER_PREFIX $PREVIOUS_LDAP_TLS_CRT_PATH $PREVIOUS_LDAP_TLS_KEY_PATH $PREVIOUS_LDAP_TLS_CA_CRT_PATH
-      [ -f ${PREVIOUS_LDAP_TLS_DH_PARAM_PATH} ] || openssl dhparam -out ${LDAP_TLS_DH_PARAM_PATH} 2048
-
-      if [ "${DISABLE_CHOWN,,}" == "false" ]; then
-        chmod 600 ${PREVIOUS_LDAP_TLS_DH_PARAM_PATH}
-        chown openldap:openldap $PREVIOUS_LDAP_TLS_CRT_PATH $PREVIOUS_LDAP_TLS_KEY_PATH $PREVIOUS_LDAP_TLS_CA_CRT_PATH $PREVIOUS_LDAP_TLS_DH_PARAM_PATH
       fi
     fi
 
@@ -374,132 +335,6 @@ EOF
 
     fi
 	
-    #
-    # TLS config
-    #
-    if [ -e "$WAS_STARTED_WITH_TLS" ] && [ "${LDAP_TLS,,}" != "true" ]; then
-      log-helper error "/!\ WARNING: LDAP_TLS=false but the container was previously started with LDAP_TLS=true"
-      log-helper error "TLS can't be disabled once added. Ignoring LDAP_TLS=false."
-      LDAP_TLS=true
-    fi
-
-    if [ -e "$WAS_STARTED_WITH_TLS_ENFORCE" ] && [ "${LDAP_TLS_ENFORCE,,}" != "true" ]; then
-      log-helper error "/!\ WARNING: LDAP_TLS_ENFORCE=false but the container was previously started with LDAP_TLS_ENFORCE=true"
-      log-helper error "TLS enforcing can't be disabled once added. Ignoring LDAP_TLS_ENFORCE=false."
-      LDAP_TLS_ENFORCE=true
-    fi
-
-    if [ "${LDAP_TLS,,}" == "true" ]; then
-
-      log-helper info "Add TLS config..."
-
-      # generate a certificate and key with ssl-helper tool if LDAP_CRT and LDAP_KEY files don't exists
-      # https://github.com/osixia/docker-light-baseimage/blob/master/image/service-available/:ssl-tools/assets/tool/ssl-helper
-      ssl-helper $LDAP_SSL_HELPER_PREFIX $LDAP_TLS_CRT_PATH $LDAP_TLS_KEY_PATH $LDAP_TLS_CA_CRT_PATH
-
-      # create DHParamFile if not found
-      [ -f ${LDAP_TLS_DH_PARAM_PATH} ] || openssl dhparam -out ${LDAP_TLS_DH_PARAM_PATH} 2048
-
-      # fix file permissions
-      if [ "${DISABLE_CHOWN,,}" == "false" ]; then
-        chmod 600 ${LDAP_TLS_DH_PARAM_PATH}
-        chown -R openldap:openldap /opt/slapd
-      fi
-
-      # adapt tls ldif
-      sed -i "s|{{ LDAP_TLS_CA_CRT_PATH }}|${LDAP_TLS_CA_CRT_PATH}|g" /opt/slapd/assets/config/tls/tls-enable.ldif
-      sed -i "s|{{ LDAP_TLS_CRT_PATH }}|${LDAP_TLS_CRT_PATH}|g" /opt/slapd/assets/config/tls/tls-enable.ldif
-      sed -i "s|{{ LDAP_TLS_KEY_PATH }}|${LDAP_TLS_KEY_PATH}|g" /opt/slapd/assets/config/tls/tls-enable.ldif
-      sed -i "s|{{ LDAP_TLS_DH_PARAM_PATH }}|${LDAP_TLS_DH_PARAM_PATH}|g" /opt/slapd/assets/config/tls/tls-enable.ldif
-
-      sed -i "s|{{ LDAP_TLS_CIPHER_SUITE }}|${LDAP_TLS_CIPHER_SUITE}|g" /opt/slapd/assets/config/tls/tls-enable.ldif
-      sed -i "s|{{ LDAP_TLS_VERIFY_CLIENT }}|${LDAP_TLS_VERIFY_CLIENT}|g" /opt/slapd/assets/config/tls/tls-enable.ldif
-
-      ldapmodify -Y EXTERNAL -Q -H ldapi:/// -f /opt/slapd/assets/config/tls/tls-enable.ldif 2>&1 | log-helper debug
-
-      [[ -f "$WAS_STARTED_WITH_TLS" ]] && rm -f "$WAS_STARTED_WITH_TLS"
-      echo "export PREVIOUS_LDAP_TLS_CA_CRT_PATH=${LDAP_TLS_CA_CRT_PATH}" > $WAS_STARTED_WITH_TLS
-      echo "export PREVIOUS_LDAP_TLS_CRT_PATH=${LDAP_TLS_CRT_PATH}" >> $WAS_STARTED_WITH_TLS
-      echo "export PREVIOUS_LDAP_TLS_KEY_PATH=${LDAP_TLS_KEY_PATH}" >> $WAS_STARTED_WITH_TLS
-      echo "export PREVIOUS_LDAP_TLS_DH_PARAM_PATH=${LDAP_TLS_DH_PARAM_PATH}" >> $WAS_STARTED_WITH_TLS
-
-      # enforce TLS
-      if [ "${LDAP_TLS_ENFORCE,,}" == "true" ]; then
-        log-helper info "Add enforce TLS..."
-        ldapmodify -Y EXTERNAL -Q -H ldapi:/// -f /opt/slapd/assets/config/tls/tls-enforce-enable.ldif 2>&1 | log-helper debug
-        touch $WAS_STARTED_WITH_TLS_ENFORCE
-
-      # disable tls enforcing (not possible for now)
-      #else
-        #log-helper info "Disable enforce TLS..."
-        #ldapmodify -Y EXTERNAL -Q -H ldapi:/// -f /opt/slapd/assets/config/tls/tls-enforce-disable.ldif 2>&1 | log-helper debug || true
-        #[[ -f "$WAS_STARTED_WITH_TLS_ENFORCE" ]] && rm -f "$WAS_STARTED_WITH_TLS_ENFORCE"
-      fi
-
-    # disable tls (not possible for now)
-    #else
-      #log-helper info "Disable TLS config..."
-      #ldapmodify -c -Y EXTERNAL -Q -H ldapi:/// -f /opt/slapd/assets/config/tls/tls-disable.ldif 2>&1 | log-helper debug || true
-      #[[ -f "$WAS_STARTED_WITH_TLS" ]] && rm -f "$WAS_STARTED_WITH_TLS"
-    fi
-
-
-
-    #
-    # Replication config
-    #
-
-    function disableReplication() {
-      sed -i "s|{{ LDAP_BACKEND }}|${LDAP_BACKEND}|g" /opt/slapd/assets/config/replication/replication-disable.ldif
-      ldapmodify -c -Y EXTERNAL -Q -H ldapi:/// -f /opt/slapd/assets/config/replication/replication-disable.ldif 2>&1 | log-helper debug || true
-      [[ -f "$WAS_STARTED_WITH_REPLICATION" ]] && rm -f "$WAS_STARTED_WITH_REPLICATION"
-    }
-
-    if [ "${LDAP_REPLICATION,,}" == "true" ]; then
-
-      log-helper info "Add replication config..."
-      disableReplication || true
-
-      i=1
-      for host in $(complex-bash-env iterate LDAP_REPLICATION_HOSTS)
-      do
-        sed -i "s|{{ LDAP_REPLICATION_HOSTS }}|olcServerID: $i ${!host}\n{{ LDAP_REPLICATION_HOSTS }}|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-        sed -i "s|{{ LDAP_REPLICATION_HOSTS_CONFIG_SYNC_REPL }}|olcSyncRepl: rid=00$i provider=${!host} ${LDAP_REPLICATION_CONFIG_SYNCPROV}\n{{ LDAP_REPLICATION_HOSTS_CONFIG_SYNC_REPL }}|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-        sed -i "s|{{ LDAP_REPLICATION_HOSTS_DB_SYNC_REPL }}|olcSyncRepl: rid=10$i provider=${!host} ${LDAP_REPLICATION_DB_SYNCPROV}\n{{ LDAP_REPLICATION_HOSTS_DB_SYNC_REPL }}|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-
-        ((i++))
-      done
-
-      get_ldap_base_dn
-      sed -i "s|\$LDAP_BASE_DN|$LDAP_BASE_DN|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-      sed -i "s|\$LDAP_ADMIN_PASSWORD|$LDAP_ADMIN_PASSWORD|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-      sed -i "s|\$LDAP_CONFIG_PASSWORD|$LDAP_CONFIG_PASSWORD|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-
-      sed -i "/{{ LDAP_REPLICATION_HOSTS }}/d" /opt/slapd/assets/config/replication/replication-enable.ldif
-      sed -i "/{{ LDAP_REPLICATION_HOSTS_CONFIG_SYNC_REPL }}/d" /opt/slapd/assets/config/replication/replication-enable.ldif
-      sed -i "/{{ LDAP_REPLICATION_HOSTS_DB_SYNC_REPL }}/d" /opt/slapd/assets/config/replication/replication-enable.ldif
-
-      sed -i "s|{{ LDAP_BACKEND }}|${LDAP_BACKEND}|g" /opt/slapd/assets/config/replication/replication-enable.ldif
-
-      ldapmodify -c -Y EXTERNAL -Q -H ldapi:/// -f /opt/slapd/assets/config/replication/replication-enable.ldif 2>&1 | log-helper debug || true
-
-      [[ -f "$WAS_STARTED_WITH_REPLICATION" ]] && rm -f "$WAS_STARTED_WITH_REPLICATION"
-      echo "export PREVIOUS_HOSTNAME=${HOSTNAME}" > $WAS_STARTED_WITH_REPLICATION
-
-    elif [ "${LDAP_REPLICATION,,}" == "own" ]; then
-
-      log-helper info "Not touching replication config..."
-
-      [[ -f "$WAS_STARTED_WITH_REPLICATION" ]] && rm -f "$WAS_STARTED_WITH_REPLICATION"
-      echo "export PREVIOUS_HOSTNAME=${HOSTNAME}" > $WAS_STARTED_WITH_REPLICATION
-
-    else
-
-      log-helper info "Disable replication config..."
-      disableReplication || true
-
-    fi
-
     if [[ -f "$WAS_ADMIN_PASSWORD_SET" ]]; then
       get_ldap_base_dn
       LDAP_CONFIG_PASSWORD_ENCRYPTED=$(slappasswd -s "$LDAP_CONFIG_PASSWORD")
@@ -555,23 +390,19 @@ EOF
   #
   log-helper info "First start is done..."
   touch $FIRST_START_DONE
+  
+  log-helper info '-------------------------------------'
+  log-helper info 'openldap user info'
+  log-helper info '-------------------------------------'
+  log-helper info "BaseDN:      ${LDAP_BASE_DN}"
+  log-helper info "Admin DN:    cn=admin,${LDAP_BASE_DN}"
+  if [ "${LDAP_READONLY_USER,,}" == "true" ]; then
+  log-helper info "ReadOnly DN: cn=${LDAP_READONLY_USER_USERNAME},${LDAP_BASE_DN}"
+  fi
+  log-helper info "-------------------------------------"
 fi
 
 ln -sf /opt/slapd/assets/.ldaprc $HOME/.ldaprc
 ln -sf /opt/slapd/assets/ldap.conf /etc/ldap/ldap.conf
-
-# force OpenLDAP to listen on all interfaces
-# We need to make sure that /etc/hosts continues to include the
-# fully-qualified domain name and not just the specified hostname.
-# Without the FQDN, /bin/hostname --fqdn stops working.
-FQDN="$(/bin/hostname --fqdn)"
-if [ "$FQDN" != "$HOSTNAME" ]; then
-    FQDN_PARAM="$FQDN"
-else
-    FQDN_PARAM=""
-fi
-ETC_HOSTS=$(cat /etc/hosts | sed "/$HOSTNAME/d")
-echo "0.0.0.0 $FQDN_PARAM $HOSTNAME" > /etc/hosts
-echo "$ETC_HOSTS" >> /etc/hosts
 
 exit 0

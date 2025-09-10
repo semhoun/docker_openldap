@@ -1,5 +1,5 @@
-FROM debian:bookworm-slim 
-LABEL maintainer="Nathanaël SEMHOUN <nathanael@semhoun.net>"
+FROM debian:trixie-slim 
+LABEL maintainer="NathanaÃ«l SEMHOUN <nathanael@semhoun.net>"
 
 ARG LDAP_OPENLDAP_GID
 ARG LDAP_OPENLDAP_UID
@@ -36,14 +36,13 @@ COPY rootfs/ /
 ENV LDAP_LOG_LEVEL 256
 # Ulimit
 ENV LDAP_NOFILE 1024
-#ÊDo not perform any chown to fix file ownership
+#ÃŠDo not perform any chown to fix file ownership
 ENV DISABLE_CHOWN false
 # Default port to bind slapd
 ENV LDAP_PORT 389
-ENV LDAPS_PORT 636
 
 # Expose default ldap and ldaps ports
-EXPOSE 389 636
+EXPOSE 389
 
 ENTRYPOINT ["/opt/bin/entrypoint.sh"]
 CMD ["/opt/slapd/process.sh"]
