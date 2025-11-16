@@ -1,4 +1,3 @@
-version: '2'
 services:
   openldap:
     image: semhoun/openldap
@@ -23,7 +22,7 @@ services:
     volumes:
       - /var/lib/ldap
       - /etc/ldap/slapd.d
-      - ./bootstap:/custom/ldif
+      - ./bootstrap:/custom/ldif
     ports:
       - "389:389"
     
